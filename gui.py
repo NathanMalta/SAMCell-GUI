@@ -58,6 +58,50 @@ class CustomListItem(QListWidgetItem):
         self.dist_map = dist_map
         self.overlay = overlay
 
+    def computeMetrics(self):
+        if self.output_gray is None or self.dist_map is None:
+            return
+        
+        #compute cell count
+        cell_count = len(np.unique(self.output_gray)) - 1
+        
+        #compute cell area
+        total_cell_area = np.sum(self.output_gray != 0)
+        cell_area = total_cell_area / cell_count
+
+        #compute confluency
+        confluency = total_cell_area / (self.dist_map.shape[0] * self.dist_map.shape[1])
+
+        #compute number of neighbors per cell
+        neighbors = []
+        for cell in np.unique(self.output_gray):
+            if cell == 0:
+                continue
+            cell_coords = self.output_gray == cell
+            #add 5 pixel buffer around cell
+            cell_coords = np.where(cell_coords)
+            cell_coords = (np.clip(cell_coords[0] - 5, 0, self.output_gray.shape[0] - 1), np.clip(cell_coords[1] - 5, 0, self.output_gray.shape[1] - 1))
+
+            #get all cells within 10 pixels
+            neighbor_cells = np.unique(self.output_gray[cell_coords[0], cell_coords[1]])
+            neighbors.append(len(neighbor_cells) - 1)
+
+        #compute average number of neighbors
+        avg_neighbors = np.mean(neighbors)
+
+        #round metrics to 2 decimal places
+        cell_count = round(cell_count, 2)
+        cell_area = round(cell_area, 2)
+        confluency = round(confluency, 2)
+        avg_neighbors = round(avg_neighbors, 2)
+
+        #convert confluency to percentage
+        confluency *= 100
+        confluency = f'{int(confluency)}%'
+
+        return cell_count, cell_area, confluency, avg_neighbors
+
+
     def getNumpyImage(self):
         '''  Converts a QImage into an opencv MAT format  '''
 
@@ -141,7 +185,7 @@ class ModelHelper():
         else:
             device = 'cpu'
             
-        model = FinetunedSAM('facebook/sam-vit-base', finetune_vision=False, finetune_prompt=True, finetune_decoder=True)
+        model = FinetunedSAM('facebook/sam-vit-base')
         trained_samcell_path = 'samcell-cyto/pytorch_model.bin'
         model.load_weights(trained_samcell_path, map_location=device)
 
@@ -198,8 +242,14 @@ class Menu(QMainWindow):
         self.overlay_label.setStyleSheet("border: 1px solid gray;")
 
         self.metrics_display = QTableWidget()
-        self.metrics_display.setRowCount(5)
+        self.metrics_display.setRowCount(4)
         self.metrics_display.setColumnCount(2)
+        self.metrics_display.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        #make image label expand to fill right widget
+        self.metrics_display.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.metrics_display.setStyleSheet("border: 1px solid gray;")
+        self.metrics_display.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+        self.metrics_display.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
 
         splitter.addWidget(self.left_widget)
         splitter.addWidget(self.right_widget)
@@ -255,7 +305,7 @@ class Menu(QMainWindow):
         self.tab_widget.setTabPosition(QtWidgets.QTabWidget.TabPosition.South)
 
         self.tab_widget.addTab(self.image_label, 'Image')
-        self.tab_widget.addTab(self.overlay_label, 'Cells Processed')
+        self.tab_widget.addTab(self.overlay_label, 'Segmentation Result')
         self.tab_widget.addTab(self.metrics_display, 'Metrics')
 
         #gray out tabs 2 and 3
@@ -319,6 +369,21 @@ class Menu(QMainWindow):
 
         if selected_item.processing_state == ImageProcessingState.COMPLETE:
             self.overlay_label.setPixmap(selected_item.getOutputPixelMap().scaledToWidth(self.right_widget.width()))
+            
+            cell_count, cell_area, confluency, avg_neighbors = selected_item.computeMetrics()
+
+            self.metrics_display.setItem(0, 0, QtWidgets.QTableWidgetItem('Cell Count'))
+            self.metrics_display.setItem(0, 1, QtWidgets.QTableWidgetItem(str(cell_count)))
+
+            self.metrics_display.setItem(1, 0, QtWidgets.QTableWidgetItem('Avg Cell Area (px)'))
+            self.metrics_display.setItem(1, 1, QtWidgets.QTableWidgetItem(str(cell_area)))
+
+            self.metrics_display.setItem(2, 0, QtWidgets.QTableWidgetItem('Confluency'))
+            self.metrics_display.setItem(2, 1, QtWidgets.QTableWidgetItem(str(confluency)))
+
+            self.metrics_display.setItem(3, 0, QtWidgets.QTableWidgetItem('Avg Neighbors'))
+            self.metrics_display.setItem(3, 1, QtWidgets.QTableWidgetItem(str(avg_neighbors)))
+
             self.tab_widget.setTabEnabled(1, True)
             self.tab_widget.setTabEnabled(2, True)
         elif selected_item.processing_state == ImageProcessingState.IN_PROGRESS:
