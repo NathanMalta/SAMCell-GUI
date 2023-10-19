@@ -7,8 +7,6 @@ import numpy as np
 import cv2
 from transformers import SamProcessor
 from slidingWindow import SlidingWindowHelper
-import os
-import matplotlib.pyplot as plt
 
 class SlidingWindowPipeline:
     def __init__(self, model, device, crop_size=256):

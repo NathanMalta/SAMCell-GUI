@@ -7,10 +7,8 @@ from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QMainWindow, QListWid
 from PyQt6.QtWidgets import QSplitter, QFrame, QGridLayout, QGroupBox, QFormLayout, QVBoxLayout, QHBoxLayout, QTableWidget
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QByteArray, QBuffer
-from PyQt6.QtGui import QColor, QPalette, QPixmap, QImage
 
 import cv2
-import matplotlib.pyplot as plt
 from model import FinetunedSAM
 from pipeline import SlidingWindowPipeline
 import torch
